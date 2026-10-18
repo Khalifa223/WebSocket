@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+
+<body>
+
+    <div id="messagesContainer"></div>
+
+    <form action="" method="post">
+        <input type="text" id="messageInput" placeholder="Envoyer un message">
+        <button id="sendButton">Envoyer</button>
+    </form>
+
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+    <script>
+        const socket = new SockJS('/ws');
+        const stompClient = Stomp.over(socket);
+        const messageInput = document.getElementById('messageInput');
+        const messagesById = new Map();
+        const messagesContainer = document.getElementById('messagesContainer');
+        const message = {
+            sender: "Anonyme",
+            content: messageInput.value
+        };
+
+
+        stompClient.connect({}, function (frame) {
+            console.log('Connected: ' + frame);
+            stompClient.subscribe('/topic/messages', function (message) {
+                addMessage(JSON.parse(message.body));
+            });
+
+            loadChat();
+        });
+
+        document.getElementById('sendButton').addEventListener('click', function (event) {
+            event.preventDefault();
+            message.content = messageInput.value
+            stompClient.send(
+                "/app/chat.sendMessage",
+                { "content-type": "application/json" },
+                JSON.stringify(message)
+            );
+            messageInput.value = '';
+        });
+
+        async function loadChat() {
+            try {
+                const response = await fetch('/api/messages');
+
+                if (!response.ok) {
+                    throw new Error(`Erreur HTTP ${response.status}`);
+                }
+
+                const messages = await response.json();
+                messages.forEach(addMessage);
+            } catch (error) {
+                console.error("Impossible de charger les messages :", error);
+            }
+        }
+
+        function addMessage(message) {
+            messagesById.set(message.id, message);
+
+            const orderedMessages = [...messagesById.values()]
+                .sort((first, second) => first.id - second.id);
+
+            messagesContainer.replaceChildren();
+
+            orderedMessages.forEach((message) => {
+                const messageContainer = document.createElement('div');
+                messageContainer.textContent = `sender : ${message.sender}, content : ${message.content}`;
+                messagesContainer.appendChild(messageContainer);
+            });
+        }
+    </script>
+</body>
+
+</html>
